@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Urja Meter Ops 2.0 — Modern Smart Meter Gateway</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS for Interactive Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Chart.js for Consumption & Voltage Visuals -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    #map { height: 420px; z-index: 10; border-radius: 0.75rem; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+  <!-- Top Navigation Bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold">⚡</div>
+        <div>
+          <h1 class="font-bold text-lg text-slate-900 leading-tight">Urja Meter Ops <span class="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full ml-1">v2 Modern Gateway</span></h1>
+          <p class="text-xs text-slate-500">Autonomous API & Operations Hub over Legacy Utility Portal</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/docs" target="_blank" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-300 flex items-center gap-1.5 transition">
+          <span>📖</span> Interactive API Docs (Swagger)
+        </a>
+        <button id="refreshBtn" onclick="refreshFleetCache()" class="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition flex items-center gap-1.5">
+          <span>🔄</span> Refresh Cache
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <!-- Stat Summary Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Fleet</div>
+        <div id="statTotalMeters" class="text-2xl font-bold text-slate-900 mt-1">...</div>
+        <div class="text-xs text-slate-500 mt-0.5">Across Jaipur Discom</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Installed & Active</div>
+        <div id="statInstalled" class="text-2xl font-bold text-emerald-600 mt-1">...</div>
+        <div class="text-xs text-slate-500 mt-0.5">Operational units</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="text-xs font-semibold text-rose-600 uppercase tracking-wider">Faulty / Alert</div>
+        <div id="statFaulty" class="text-2xl font-bold text-rose-600 mt-1">...</div>
+        <div class="text-xs text-slate-500 mt-0.5">Require inspection</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Decommissioned</div>
+        <div id="statDecomm" class="text-2xl font-bold text-slate-600 mt-1">...</div>
+        <div class="text-xs text-slate-500 mt-0.5">Retired meters</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="text-xs font-semibold text-blue-600 uppercase tracking-wider">Transformers (DTs)</div>
+        <div id="statTotalDTs" class="text-2xl font-bold text-blue-600 mt-1">...</div>
+        <div class="text-xs text-slate-500 mt-0.5">Distribution nodes</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="text-xs font-semibold text-purple-600 uppercase tracking-wider">Transformer Cap.</div>
+        <div id="statTotalCap" class="text-2xl font-bold text-purple-600 mt-1">...</div>
+        <div class="text-xs text-slate-500 mt-0.5">Total rated kVA</div>
+      </div>
+    </div>
+
+    <!-- Map & Network Tree Split Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Geospatial Fleet Map (2 cols) -->
+      <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <span>📍</span> Geographic Fleet Distribution & Proximity
+            </h2>
+            <p class="text-xs text-slate-500">Live coordinates plotted across Jaipur service territory</p>
+          </div>
+          <div class="flex items-center gap-3 text-xs">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Installed</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Faulty</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Decommissioned</span>
+          </div>
+        </div>
+        <div id="map" class="w-full flex-1"></div>
+      </div>
+
+      <!-- Electrical Network Hierarchy Explorer (1 col) -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+        <div class="mb-3">
+          <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span>⚡</span> Electrical Network Hierarchy
+          </h2>
+          <p class="text-xs text-slate-500">Reconstructed & healed Discom network tree</p>
+        </div>
+        <div id="hierarchyTreeContainer" class="flex-1 overflow-y-auto max-h-[380px] text-xs space-y-1.5 pr-1">
+          <div class="text-slate-400 py-6 text-center">Loading network hierarchy...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meters Explorer & Filter Section -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <!-- Filter controls -->
+      <div class="p-4 border-b border-slate-200 space-y-3">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span>🔍</span> Fleet Query & Multi-Attribute Filtering
+          </h2>
+          <span id="meterResultsCount" class="text-xs font-semibold px-2 py-1 rounded bg-slate-100 text-slate-600">Showing ...</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <!-- Text Search -->
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Search ID / Serial</label>
+            <input id="filterQuery" type="text" placeholder="e.g. J10001 or GE84..." oninput="onFilterChange()"
+              class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+          </div>
+          <!-- Make Filter -->
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Manufacturer</label>
+            <select id="filterMake" onchange="onFilterChange()" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white">
+              <option value="">All Manufacturers</option>
+              <option value="HPL">HPL</option>
+              <option value="L&T">L&T</option>
+              <option value="Genus">Genus</option>
+              <option value="Secure">Secure</option>
+              <option value="Allied">Allied</option>
+            </select>
+          </div>
+          <!-- Status Filter -->
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Install Status</label>
+            <select id="filterStatus" onchange="onFilterChange()" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white">
+              <option value="">All Statuses</option>
+              <option value="Installed">Installed</option>
+              <option value="Faulty">Faulty</option>
+              <option value="Decommissioned">Decommissioned</option>
+            </select>
+          </div>
+          <!-- Phase Filter -->
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Phase Type</label>
+            <select id="filterPhase" onchange="onFilterChange()" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white">
+              <option value="">All Phases</option>
+              <option value="single">Single Phase</option>
+              <option value="three">Three Phase</option>
+            </select>
+          </div>
+          <!-- Build Filter -->
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Hardware Build</label>
+            <select id="filterBuild" onchange="onFilterChange()" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white">
+              <option value="">All Builds</option>
+              <option value="legacy">Legacy (Class 1)</option>
+              <option value="v2">v2 NextGen</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meter Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs divide-y divide-slate-200">
+          <thead class="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold">
+            <tr>
+              <th class="px-4 py-3">Meter ID</th>
+              <th class="px-4 py-3">Serial No</th>
+              <th class="px-4 py-3">Manufacturer</th>
+              <th class="px-4 py-3">Phase</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Transformer</th>
+              <th class="px-4 py-3">Feeder</th>
+              <th class="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="metersTableBody" class="divide-y divide-slate-100 text-slate-700 bg-white">
+            <tr>
+              <td colspan="8" class="text-center py-8 text-slate-400">Loading meters...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+        <button id="prevPageBtn" onclick="changePage(-1)" class="px-3 py-1.5 border border-slate-300 rounded-md bg-white hover:bg-slate-100 disabled:opacity-40">Previous</button>
+        <span id="pageIndicator">Page 1 of 1</span>
+        <button id="nextPageBtn" onclick="changePage(1)" class="px-3 py-1.5 border border-slate-300 rounded-md bg-white hover:bg-slate-100 disabled:opacity-40">Next</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Meter Detail & Energy Modal -->
+  <div id="meterModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 id="modalMeterId" class="text-xl font-bold text-slate-900">Meter ...</h3>
+            <span id="modalStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full font-semibold">...</span>
+          </div>
+          <p id="modalBreadcrumb" class="text-xs text-slate-500 mt-1">Zone > Circle > Division > Substation > Feeder > DT</p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold p-1">✕</button>
+      </div>
+
+      <!-- Nameplate Grid -->
+      <div>
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nameplate Specifications</h4>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+          <div><span class="text-slate-400 block">Serial No</span><span id="modalSerial" class="font-semibold text-slate-800">...</span></div>
+          <div><span class="text-slate-400 block">Manufacturer</span><span id="modalMake" class="font-semibold text-slate-800">...</span></div>
+          <div><span class="text-slate-400 block">Phase</span><span id="modalPhase" class="font-semibold text-slate-800">...</span></div>
+          <div><span class="text-slate-400 block">Build</span><span id="modalBuild" class="font-semibold text-slate-800">...</span></div>
+        </div>
+      </div>
+
+      <!-- Energy Consumption Analytics Section -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">7-Day Interval Consumption & Voltage Profiles</h4>
+          <span id="modalEnergyStatus" class="text-xs text-slate-500">Loading consumption...</span>
+        </div>
+
+        <!-- Summary KPI badges -->
+        <div id="modalEnergyKPIs" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 hidden">
+          <div class="bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg text-xs">
+            <div class="text-indigo-600 font-medium">Net Consumed</div>
+            <div id="kpiNetKwh" class="text-lg font-bold text-indigo-900 mt-0.5">... kWh</div>
+          </div>
+          <div class="bg-blue-50 border border-blue-100 p-2.5 rounded-lg text-xs">
+            <div class="text-blue-600 font-medium">Power Factor (Est.)</div>
+            <div id="kpiPf" class="text-lg font-bold text-blue-900 mt-0.5">...</div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-100 p-2.5 rounded-lg text-xs">
+            <div class="text-emerald-600 font-medium">Avg Voltage (R)</div>
+            <div id="kpiAvgVolt" class="text-lg font-bold text-emerald-900 mt-0.5">... V</div>
+          </div>
+          <div class="bg-amber-50 border border-amber-100 p-2.5 rounded-lg text-xs">
+            <div class="text-amber-600 font-medium">Voltage Range</div>
+            <div id="kpiVoltRange" class="text-lg font-bold text-amber-900 mt-0.5">... V</div>
+          </div>
+        </div>
+
+        <!-- Consumption Chart -->
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <canvas id="consumptionChart" height="110"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Application Script -->
+  <script>
+    let map = null;
+    let markersLayer = null;
+    let currentPage = 1;
+    let totalPages = 1;
+    let consumptionChartInstance = null;
+
+    // Initialize map on page load
+    function initMap() {
+      // Jaipur default center
+      map = L.map('map').setView([26.9124, 75.7873], 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+    }
+
+    // Color marker generator
+    function createCircleMarker(lat, lng, status, meterId, make) {
+      let color = '#10b981'; // Green for Installed
+      if (status === 'Faulty') color = '#ef4444'; // Red
+      if (status === 'Decommissioned') color = '#94a3b8'; // Slate
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 6,
+        fillColor: color,
+        color: '#ffffff',
+        weight: 1.5,
+        opacity: 1,
+        fillOpacity: 0.85
+      });
+
+      marker.bindPopup(`
+        <div class="text-xs">
+          <div class="font-bold text-slate-900 text-sm">Meter ${meterId}</div>
+          <div class="text-slate-600">Make: <b>${make}</b></div>
+          <div class="text-slate-600">Status: <span class="font-semibold">${status}</span></div>
+          <button onclick="openMeterModal('${meterId}')" class="mt-2 w-full px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700">
+            View Analytics & Readings
+          </button>
+        </div>
+      `);
+      return marker;
+    }
+
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/v1/analytics/stats');
+        const data = await res.json();
+        document.getElementById('statTotalMeters').innerText = data.total_meters;
+        document.getElementById('statInstalled').innerText = data.by_status.Installed || 0;
+        document.getElementById('statFaulty').innerText = data.by_status.Faulty || 0;
+        document.getElementById('statDecomm').innerText = data.by_status.Decommissioned || 0;
+        document.getElementById('statTotalDTs').innerText = data.total_dts;
+        document.getElementById('statTotalCap').innerText = `${data.total_transformer_capacity_kva} kVA`;
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    async function loadHierarchyTree() {
+      try {
+        const res = await fetch('/api/v1/hierarchy/tree');
+        const tree = await res.json();
+        const container = document.getElementById('hierarchyTreeContainer');
+        container.innerHTML = renderTreeBranch(tree);
+      } catch (err) {
+        console.error('Failed to load hierarchy tree:', err);
+      }
+    }
+
+    function renderTreeBranch(node) {
+      if (!node.children || node.children.length === 0) {
+        return `<div class="pl-3 py-0.5 text-slate-600 border-l border-slate-200">
+          📍 <b>${node.name}</b> (${node.code}) <span class="text-indigo-600 font-semibold">${node.meter_count}m</span>
+        </div>`;
+      }
+
+      return `
+        <details class="pl-2 border-l border-indigo-100 group" ${node.level === 'discom' ? 'open' : ''}>
+          <summary class="cursor-pointer py-1 font-medium text-slate-800 hover:text-indigo-600 flex items-center justify-between">
+            <span>📁 ${node.name} <span class="text-xs text-slate-400">(${node.code})</span></span>
+            <span class="text-xs bg-slate-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">${node.meter_count}</span>
+          </summary>
+          <div class="space-y-1 mt-1">
+            ${node.children.map(renderTreeBranch).join('')}
+          </div>
+        </details>
+      `;
+    }
+
+    let filterTimeout = null;
+    function onFilterChange() {
+      clearTimeout(filterTimeout);
+      filterTimeout = setTimeout(() => {
+        currentPage = 1;
+        fetchMeters();
+      }, 250);
+    }
+
+    async function fetchMeters() {
+      const q = document.getElementById('filterQuery').value;
+      const make = document.getElementById('filterMake').value;
+      const status = document.getElementById('filterStatus').value;
+      const phase = document.getElementById('filterPhase').value;
+      const build = document.getElementById('filterBuild').value;
+
+      const params = new URLSearchParams({
+        page: currentPage,
+        limit: 15,
+      });
+      if (q) params.append('q', q);
+      if (make) params.append('make', make);
+      if (status) params.append('install_status', status);
+      if (phase) params.append('phase_type', phase);
+      if (build) params.append('build', build);
+
+      try {
+        const res = await fetch(`/api/v1/meters?${params.toString()}`);
+        const data = await res.json();
+        renderMetersTable(data.data);
+        document.getElementById('meterResultsCount').innerText = `Showing ${data.data.length} of ${data.total} meters`;
+        totalPages = data.total_pages;
+        document.getElementById('pageIndicator').innerText = `Page ${data.page} of ${data.total_pages}`;
+        document.getElementById('prevPageBtn').disabled = data.page <= 1;
+        document.getElementById('nextPageBtn').disabled = data.page >= data.total_pages;
+
+        // Also update map pins with the matching meters
+        updateMapMarkers(data.data);
+      } catch (err) {
+        console.error('Failed to fetch meters:', err);
+      }
+    }
+
+    function updateMapMarkers(meters) {
+      if (!markersLayer) return;
+      markersLayer.clearLayers();
+      const bounds = [];
+      meters.forEach(m => {
+        if (m.geo && m.geo.latitude && m.geo.longitude) {
+          const marker = createCircleMarker(m.geo.latitude, m.geo.longitude, m.install_status, m.meter_id, m.make);
+          markersLayer.addLayer(marker);
+          bounds.push([m.geo.latitude, m.geo.longitude]);
+        }
+      });
+      if (bounds.length > 0 && map) {
+        map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 });
+      }
+    }
+
+    function renderMetersTable(meters) {
+      const tbody = document.getElementById('metersTableBody');
+      if (!meters || meters.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">No meters match the specified filters.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = meters.map(m => {
+        let badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        if (m.install_status === 'Faulty') badgeColor = 'bg-rose-50 text-rose-700 border-rose-200';
+        if (m.install_status === 'Decommissioned') badgeColor = 'bg-slate-100 text-slate-600 border-slate-200';
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-4 py-3 font-bold text-indigo-700 cursor-pointer hover:underline" onclick="openMeterModal('${m.meter_id}')">${m.meter_id}</td>
+            <td class="px-4 py-3 font-mono text-slate-600">${m.serial_no}</td>
+            <td class="px-4 py-3">${m.make}</td>
+            <td class="px-4 py-3 capitalize">${m.phase_type}</td>
+            <td class="px-4 py-3">
+              <span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeColor}">${m.install_status}</span>
+            </td>
+            <td class="px-4 py-3 font-medium text-slate-800">${m.dt_code || '—'}</td>
+            <td class="px-4 py-3 text-slate-500">${m.feeder_code || '—'}</td>
+            <td class="px-4 py-3 text-right">
+              <button onclick="openMeterModal('${m.meter_id}')" class="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200">
+                Inspect 📊
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function changePage(delta) {
+      const target = currentPage + delta;
+      if (target >= 1 && target <= totalPages) {
+        currentPage = target;
+        fetchMeters();
+      }
+    }
+
+    async function openMeterModal(meterId) {
+      document.getElementById('meterModal').classList.remove('hidden');
+      document.getElementById('modalMeterId').innerText = `Meter ${meterId}`;
+      document.getElementById('modalEnergyStatus').innerText = 'Loading consumption & voltage readings...';
+      document.getElementById('modalEnergyKPIs').classList.add('hidden');
+
+      try {
+        // Fetch detail and energy in parallel
+        const [detailRes, energyRes] = await Promise.all([
+          fetch(`/api/v1/meters/${meterId}`),
+          fetch(`/api/v1/meters/${meterId}/energy?include_summary=true`)
+        ]);
+
+        const detail = await detailRes.json();
+        const energy = await energyRes.json();
+
+        // Populate Nameplate
+        document.getElementById('modalSerial').innerText = detail.serial_no;
+        document.getElementById('modalMake').innerText = detail.make;
+        document.getElementById('modalPhase').innerText = detail.phase_type;
+        document.getElementById('modalBuild').innerText = detail.build || 'legacy';
+
+        // Status badge
+        const badge = document.getElementById('modalStatusBadge');
+        badge.innerText = detail.install_status;
+        badge.className = `text-xs px-2.5 py-0.5 rounded-full font-semibold ${
+          detail.install_status === 'Installed' ? 'bg-emerald-100 text-emerald-800' :
+          detail.install_status === 'Faulty' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-800'
+        }`;
+
+        // Breadcrumb
+        const h = detail.hierarchy || {};
+        const crumbs = [
+          h.zone ? h.zone.name : null,
+          h.circle ? h.circle.name : null,
+          h.division ? h.division.name : null,
+          h.substation ? h.substation.name : null,
+          h.feeder ? h.feeder.name : null,
+          h.dt ? h.dt.name : null
+        ].filter(Boolean);
+        document.getElementById('modalBreadcrumb').innerText = crumbs.join(' › ') || 'Hierarchy unavailable';
+
+        // Render Energy KPI badges & Chart
+        if (energy.summary) {
+          document.getElementById('kpiNetKwh').innerText = `${energy.summary.net_kwh_consumed} kWh`;
+          document.getElementById('kpiPf').innerText = energy.summary.estimated_power_factor || 'N/A';
+          document.getElementById('kpiAvgVolt').innerText = `${energy.summary.avg_voltage_r} V`;
+          document.getElementById('kpiVoltRange').innerText = `${energy.summary.min_voltage_r} - ${energy.summary.max_voltage_r} V`;
+          document.getElementById('modalEnergyKPIs').classList.remove('hidden');
+          document.getElementById('modalEnergyStatus').innerText = `${energy.readings.length} interval readings analyzed`;
+        }
+
+        renderConsumptionChart(energy.readings);
+
+      } catch (err) {
+        console.error('Failed to load meter details/energy:', err);
+        document.getElementById('modalEnergyStatus').innerText = 'Failed to load meter consumption.';
+      }
+    }
+
+    function renderConsumptionChart(readings) {
+      const ctx = document.getElementById('consumptionChart').getContext('2d');
+      if (consumptionChartInstance) {
+        consumptionChartInstance.destroy();
+      }
+
+      if (!readings || readings.length === 0) {
+        return;
+      }
+
+      // Sample down to every 4th point for clean chart performance (84 intervals across 7 days)
+      const sampled = readings.filter((_, idx) => idx % 4 === 0);
+      const labels = sampled.map(r => r.timestamp.split(' ')[0] + ' ' + r.timestamp.split(' ')[1]);
+      const kwhData = sampled.map(r => r.kwh);
+      const voltData = sampled.map(r => r.volt_r);
+
+      consumptionChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Cumulative Energy (kWh)',
+              data: kwhData,
+              borderColor: '#4f46e5',
+              backgroundColor: 'rgba(79, 70, 229, 0.08)',
+              fill: true,
+              yAxisID: 'yKwh',
+              tension: 0.2,
+              pointRadius: 1
+            },
+            {
+              label: 'R-Phase Voltage (V)',
+              data: voltData,
+              borderColor: '#10b981',
+              borderDash: [4, 4],
+              yAxisID: 'yVolt',
+              tension: 0.1,
+              pointRadius: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 7, font: { size: 10 } }
+            },
+            yKwh: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: 'Active Energy (kWh)', font: { size: 10 } },
+              ticks: { font: { size: 10 } }
+            },
+            yVolt: {
+              type: 'linear',
+              position: 'right',
+              title: { display: true, text: 'Voltage (V)', font: { size: 10 } },
+              min: 200,
+              max: 260,
+              grid: { drawOnChartArea: false },
+              ticks: { font: { size: 10 } }
+            }
+          },
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    function closeModal() {
+      document.getElementById('meterModal').classList.add('hidden');
+    }
+
+    async function refreshFleetCache() {
+      const btn = document.getElementById('refreshBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳</span> Syncing...`;
+      try {
+        await fetch('/api/v1/cache/refresh', { method: 'POST' });
+        await Promise.all([loadStats(), loadHierarchyTree(), fetchMeters()]);
+      } catch (err) {
+        console.error('Failed to refresh cache:', err);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🔄</span> Refresh Cache`;
+      }
+    }
+
+    // Initialize components on load
+    window.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      loadStats();
+      loadHierarchyTree();
+      fetchMeters();
+    });
+  </script>
+</body>
+</html>
