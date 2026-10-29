@@ -143,3 +143,4 @@ async def get_meter_energy(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Meter '{meter_id}' not found.",
         )
+

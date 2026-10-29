@@ -138,3 +138,4 @@ def test_dashboard_html():
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Urja Meter Ops" in response.text
+

@@ -17,3 +17,4 @@ async def get_fleet_stats(
     service: MeterService = Depends(get_meter_service),
 ) -> FleetStats:
     return await service.get_fleet_stats()
+

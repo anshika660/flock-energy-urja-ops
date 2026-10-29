@@ -166,3 +166,4 @@ Every incomplete record is cross-referenced and automatically healed with 100% a
 | Data Consistency | 22 corrupted hierarchy records | 100% healed canonical electrical topology |
 | Energy Analytics | Raw string dump | Typed metrics, net kWh, voltage bounds, PF estimate |
 | Response Times | 400ms – 1.2s per page | < 1ms for queries (in-memory cached index) |
+

@@ -55,3 +55,4 @@ def test_meter_detail_model():
     assert detail.meter_id == "J100000"
     assert detail.make == "HPL"
     assert detail.geo.latitude == 26.9389
+

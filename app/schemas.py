@@ -137,3 +137,4 @@ class HealthCheck(BaseModel):
     cached_meters: int
     cache_last_updated: Optional[str]
     version: str = "1.0.0"
+

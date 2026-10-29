@@ -42,3 +42,4 @@ async def refresh_cache(
         cache_last_updated=service.last_synced_iso,
         version="1.0.0",
     )
+
