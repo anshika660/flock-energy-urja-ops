@@ -1,5 +1,10 @@
 # Urja Meter Ops — Modern REST API Gateway & Fleet Intelligence
 
+[![Test Suite](https://github.com/anshika660/flock-energy-urja-ops/actions/workflows/test.yml/badge.svg)](https://github.com/anshika660/flock-energy-urja-ops/actions)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A production-ready, high-performance Python FastAPI service built in front of the legacy **Urja Meter Ops** portal (`https://urja-ops.flockenergy.tech`).
 
 This service replaces manual copy-pasting from a browser with a clean, documented, and resilient REST API. It resolves legacy schema discrepancies, reconstructs and self-heals corrupted network hierarchies, provides sub-millisecond multi-attribute and geospatial proximity querying, analyzes interval consumption readings, and serves an interactive web operations dashboard.
